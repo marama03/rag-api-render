@@ -113,7 +113,7 @@ async function searchWeaviate(embedding, limit = 5) {
           Document(
             nearVector: {
               vector: ${JSON.stringify(embedding)}
-              certainty: 0.5
+              certainty: 0.75
             }
             limit: ${limit}
           ) {
@@ -205,14 +205,137 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // List all documents endpoint
+  if (req.method === 'GET' && req.url === '/documents') {
+    try {
+      console.log(`[${new Date().toISOString()}] List all documents request`);
+
+      const query = {
+        query: `{
+          Get {
+            Document(limit: 1000) {
+              text
+              title
+              source
+              document_id
+              chunk_id
+              created_at
+            }
+          }
+        }`
+      };
+
+      const postData = JSON.stringify(query);
+      const options = {
+        hostname: WEAVIATE_URL,
+        path: '/v1/graphql',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': postData.length
+        }
+      };
+
+      const req2 = https.request(options, (res2) => {
+        let data = '';
+        res2.on('data', (chunk) => data += chunk);
+        res2.on('end', () => {
+          const parsed = JSON.parse(data);
+          const documents = parsed.data?.Get?.Document || [];
+          console.log(`  ✓ Found ${documents.length} documents`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'success', documents: documents, total: documents.length }));
+        });
+      });
+
+      req2.on('error', (e) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      });
+
+      req2.write(postData);
+      req2.end();
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return;
+  }
+
+  // Delete document by document_id endpoint
+  if (req.method === 'POST' && req.url.startsWith('/delete/')) {
+    const documentId = req.url.split('/delete/')[1];
+    try {
+      console.log(`[${new Date().toISOString()}] Delete document: ${documentId}`);
+
+      const mutation = {
+        query: `mutation {
+          Delete(
+            class: "Document"
+            where: {
+              path: ["document_id"]
+              operator: Equal
+              valueText: "${documentId}"
+            }
+          ) {
+            successful
+          }
+        }`
+      };
+
+      const postData = JSON.stringify(mutation);
+      const options = {
+        hostname: WEAVIATE_URL,
+        path: '/v1/graphql',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': postData.length
+        }
+      };
+
+      const req2 = https.request(options, (res2) => {
+        let data = '';
+        res2.on('data', (chunk) => data += chunk);
+        res2.on('end', () => {
+          console.log('  ✓ Document deleted');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'success', message: 'Document deleted' }));
+        });
+      });
+
+      req2.on('error', (e) => {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      });
+
+      req2.write(postData);
+      req2.end();
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return;
+  }
+
   // Delete all documents endpoint
-  if (req.method === 'POST' && req.url === '/delete-all') {
+  if (req.method === 'DELETE' && req.url === '/documents') {
     try {
       console.log(`[${new Date().toISOString()}] Delete all documents request`);
 
-      // Delete all objects in Document class
       const mutation = {
-        query: `mutation { Delete(class: "Document", where: {operator: GreaterThan, valueInt: 0, path: ["_id"]}) { successful } }`
+        query: `mutation {
+          Delete(
+            class: "Document"
+            where: {
+              path: ["document_id"]
+              operator: NotEqual
+              valueText: ""
+            }
+          ) {
+            successful
+          }
+        }`
       };
 
       const postData = JSON.stringify(mutation);
@@ -237,7 +360,6 @@ const server = http.createServer(async (req, res) => {
       });
 
       req2.on('error', (e) => {
-        console.error('  ✗ Error:', e.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       });
@@ -245,7 +367,6 @@ const server = http.createServer(async (req, res) => {
       req2.write(postData);
       req2.end();
     } catch (error) {
-      console.error('  ✗ Error:', error.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: error.message }));
     }
