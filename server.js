@@ -346,9 +346,15 @@ const server = http.createServer(async (req, res) => {
       console.log(`[${new Date().toISOString()}] Delete all documents request`);
 
       // Use REST API batch delete with match filter
+      // Must include where clause - match all documents where document_id exists
       const deletePayload = {
         match: {
-          class: 'Document'
+          class: 'Document',
+          where: {
+            path: ['document_id'],
+            operator: 'NotEqual',
+            valueText: '__NONEXISTENT__' // Matches all docs (no doc has this value)
+          }
         },
         output: 'verbose',
         dryRun: false
