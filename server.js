@@ -265,32 +265,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Delete document by document_id endpoint
+  // Delete document by document_id endpoint (uses REST API batch delete)
   if (req.method === 'POST' && req.url.startsWith('/delete/')) {
     const documentId = req.url.split('/delete/')[1];
     try {
       console.log(`[${new Date().toISOString()}] Delete document: ${documentId}`);
 
-      const mutation = {
-        query: `mutation {
-          Delete(
-            class: "Document"
-            where: {
-              path: ["document_id"]
-              operator: Equal
-              valueText: "${documentId}"
-            }
-          ) {
-            successful
+      // Use REST API batch delete with where filter for specific document_id
+      const deletePayload = {
+        match: {
+          class: 'Document',
+          where: {
+            path: ['document_id'],
+            operator: 'Equal',
+            valueText: documentId
           }
-        }`
+        },
+        output: 'verbose',
+        dryRun: false
       };
 
-      const postData = JSON.stringify(mutation);
+      const postData = JSON.stringify(deletePayload);
       const options = {
         hostname: WEAVIATE_URL,
-        path: '/v1/graphql',
-        method: 'POST',
+        path: '/v1/batch/objects',
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': postData.length
@@ -305,14 +304,15 @@ const server = http.createServer(async (req, res) => {
             const result = JSON.parse(data);
             console.log('  Weaviate response:', JSON.stringify(result, null, 2));
 
-            if (result.errors) {
-              console.error('  ✗ Weaviate errors:', result.errors);
+            if (result.error || result.errors) {
+              const errorMsg = result.error?.message || JSON.stringify(result.errors);
+              console.error('  ✗ Weaviate errors:', errorMsg);
               res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', errors: result.errors }));
+              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', error: errorMsg }));
               return;
             }
 
-            const successful = result.data?.Delete?.successful || 0;
+            const successful = result.results?.successful || result.matches || 0;
             console.log(`  ✓ Deleted ${successful} objects for document ${documentId}`);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -340,31 +340,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Delete all documents endpoint
+  // Delete all documents endpoint (uses REST API batch delete)
   if (req.method === 'DELETE' && req.url === '/documents') {
     try {
       console.log(`[${new Date().toISOString()}] Delete all documents request`);
 
-      const mutation = {
-        query: `mutation {
-          Delete(
-            class: "Document"
-            where: {
-              path: ["document_id"]
-              operator: NotEqual
-              valueText: ""
-            }
-          ) {
-            successful
-          }
-        }`
+      // Use REST API batch delete with match filter
+      const deletePayload = {
+        match: {
+          class: 'Document'
+        },
+        output: 'verbose',
+        dryRun: false
       };
 
-      const postData = JSON.stringify(mutation);
+      const postData = JSON.stringify(deletePayload);
       const options = {
         hostname: WEAVIATE_URL,
-        path: '/v1/graphql',
-        method: 'POST',
+        path: '/v1/batch/objects',
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': postData.length
@@ -379,14 +373,15 @@ const server = http.createServer(async (req, res) => {
             const result = JSON.parse(data);
             console.log('  Weaviate response:', JSON.stringify(result, null, 2));
 
-            if (result.errors) {
-              console.error('  ✗ Weaviate errors:', result.errors);
+            if (result.error || result.errors) {
+              const errorMsg = result.error?.message || JSON.stringify(result.errors);
+              console.error('  ✗ Weaviate errors:', errorMsg);
               res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', errors: result.errors }));
+              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', error: errorMsg }));
               return;
             }
 
-            const successful = result.data?.Delete?.successful || 0;
+            const successful = result.results?.successful || result.matches || 0;
             console.log(`  ✓ Deleted ${successful} objects`);
 
             res.writeHead(200, { 'Content-Type': 'application/json' });
