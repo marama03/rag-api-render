@@ -169,12 +169,15 @@ async function searchWeaviate(embedding, limit = 5) {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Comprehensive CORS headers for all browsers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  res.setHeader('Access-Control-Allow-Credentials', 'false');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(200);
+    res.writeHead(204); // No Content for preflight
     res.end();
     return;
   }
