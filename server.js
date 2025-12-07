@@ -301,9 +301,28 @@ const server = http.createServer(async (req, res) => {
         let data = '';
         res2.on('data', (chunk) => data += chunk);
         res2.on('end', () => {
-          console.log('  ✓ Document deleted');
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'success', message: 'Document deleted' }));
+          try {
+            const result = JSON.parse(data);
+            console.log('  Weaviate response:', JSON.stringify(result, null, 2));
+
+            if (result.errors) {
+              console.error('  ✗ Weaviate errors:', result.errors);
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', errors: result.errors }));
+              return;
+            }
+
+            const successful = result.data?.Delete?.successful || 0;
+            console.log(`  ✓ Deleted ${successful} objects for document ${documentId}`);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'success', message: 'Document deleted', deleted_count: successful }));
+          } catch (e) {
+            console.error('  ✗ Parse error:', e);
+            console.error('  Raw response:', data);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', message: 'Failed to parse response', raw: data }));
+          }
         });
       });
 
@@ -356,9 +375,28 @@ const server = http.createServer(async (req, res) => {
         let data = '';
         res2.on('data', (chunk) => data += chunk);
         res2.on('end', () => {
-          console.log('  ✓ All documents deleted');
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'success', message: 'All documents deleted' }));
+          try {
+            const result = JSON.parse(data);
+            console.log('  Weaviate response:', JSON.stringify(result, null, 2));
+
+            if (result.errors) {
+              console.error('  ✗ Weaviate errors:', result.errors);
+              res.writeHead(500, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ status: 'error', message: 'Weaviate deletion failed', errors: result.errors }));
+              return;
+            }
+
+            const successful = result.data?.Delete?.successful || 0;
+            console.log(`  ✓ Deleted ${successful} objects`);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'success', message: 'All documents deleted', deleted_count: successful }));
+          } catch (e) {
+            console.error('  ✗ Parse error:', e);
+            console.error('  Raw response:', data);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'error', message: 'Failed to parse response', raw: data }));
+          }
         });
       });
 
