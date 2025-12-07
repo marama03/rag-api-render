@@ -205,6 +205,53 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Delete all documents endpoint
+  if (req.method === 'POST' && req.url === '/delete-all') {
+    try {
+      console.log(`[${new Date().toISOString()}] Delete all documents request`);
+
+      // Delete all objects in Document class
+      const mutation = {
+        query: `mutation { Delete(class: "Document", where: {operator: GreaterThan, valueInt: 0, path: ["_id"]}) { successful } }`
+      };
+
+      const postData = JSON.stringify(mutation);
+      const options = {
+        hostname: WEAVIATE_URL,
+        path: '/v1/graphql',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': postData.length
+        }
+      };
+
+      const req2 = https.request(options, (res2) => {
+        let data = '';
+        res2.on('data', (chunk) => data += chunk);
+        res2.on('end', () => {
+          console.log('  ✓ All documents deleted');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'success', message: 'All documents deleted' }));
+        });
+      });
+
+      req2.on('error', (e) => {
+        console.error('  ✗ Error:', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      });
+
+      req2.write(postData);
+      req2.end();
+    } catch (error) {
+      console.error('  ✗ Error:', error.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
+    }
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/search') {
     let body = '';
 
