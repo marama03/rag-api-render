@@ -155,8 +155,8 @@ async function storeInWeaviate(objects) {
   });
 }
 
-// Get document count (optionally filtered by client_id)
-async function getDocumentCount(clientId = null) {
+// Get chunk count (total number of chunks)
+async function getChunkCount(clientId = null) {
   return new Promise((resolve, reject) => {
     let whereClause = '';
     if (clientId) {
@@ -192,19 +192,76 @@ async function getDocumentCount(clientId = null) {
       res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
         try {
-          const parsed = JSON.parse(data);
-          const count = parsed.data?.Aggregate?.Document?.[0]?.meta?.count || 0;
+          const result = JSON.parse(data);
+          const count = result.data?.Aggregate?.Document?.[0]?.meta?.count || 0;
           resolve(count);
         } catch (e) {
-          reject(e);
+          resolve(0);
         }
       });
     });
 
-    req.on('error', reject);
+    req.on('error', () => resolve(0));
     req.setTimeout(30000, () => {
       req.destroy();
-      reject(new Error('Weaviate count request timeout'));
+      resolve(0);
+    });
+    req.write(postData);
+    req.end();
+  });
+}
+
+// Get unique document count (by counting unique document_ids)
+async function getDocumentCount(clientId = null) {
+  return new Promise((resolve, reject) => {
+    let whereClause = '';
+    if (clientId) {
+      whereClause = `where: {path: ["client_id"], operator: Equal, valueText: "${clientId}"},`;
+    }
+
+    // Query all document_ids and count unique ones
+    const query = {
+      query: `{
+        Get {
+          Document(${whereClause} limit: 10000) {
+            document_id
+          }
+        }
+      }`
+    };
+
+    const postData = JSON.stringify(query);
+
+    const options = {
+      hostname: WEAVIATE_URL,
+      path: '/v1/graphql',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(data);
+          const documents = parsed.data?.Get?.Document || [];
+          // Count unique document_ids
+          const uniqueDocIds = new Set(documents.map(d => d.document_id));
+          resolve(uniqueDocIds.size);
+        } catch (e) {
+          resolve(0);
+        }
+      });
+    });
+
+    req.on('error', () => resolve(0));
+    req.setTimeout(30000, () => {
+      req.destroy();
+      resolve(0);
     });
     req.write(postData);
     req.end();
@@ -516,14 +573,18 @@ const server = http.createServer(async (req, res) => {
       const clientId = urlParams.get('client_id');
       console.log(`[${new Date().toISOString()}] Count request${clientId ? ` for client: ${clientId}` : ' (all clients)'}`);
 
-      const count = await getDocumentCount(clientId);
-      console.log(`  ✓ Total documents: ${count}`);
+      const [documentCount, chunkCount] = await Promise.all([
+        getDocumentCount(clientId),
+        getChunkCount(clientId)
+      ]);
+      console.log(`  ✓ Documents: ${documentCount}, Chunks: ${chunkCount}`);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'success',
         client_id: clientId || 'all',
-        total_documents: count,
+        total_documents: documentCount,
+        total_chunks: chunkCount,
         timestamp: new Date().toISOString()
       }));
     } catch (error) {
