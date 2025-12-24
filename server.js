@@ -415,7 +415,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/search') {
+  // Handle both GET and POST for /search
+  const urlParts = req.url.split('?');
+  const pathname = urlParts[0];
+  const urlParams = new URLSearchParams(urlParts[1] || '');
+
+  if ((req.method === 'POST' || req.method === 'GET') && pathname === '/search') {
     let body = '';
 
     req.on('data', chunk => {
@@ -424,13 +429,38 @@ const server = http.createServer(async (req, res) => {
 
     req.on('end', async () => {
       try {
-        const data = JSON.parse(body);
-        const query = data.query;
-        const limit = data.limit || 5;
+        let query = null;
+        let limit = 5;
+
+        // Try to get query from multiple sources
+        // 1. URL query parameters (GET or POST with ?query=...)
+        if (urlParams.get('query')) {
+          query = urlParams.get('query');
+          limit = parseInt(urlParams.get('limit')) || 5;
+        }
+        // 2. JSON body
+        else if (body && body.trim().startsWith('{')) {
+          try {
+            const data = JSON.parse(body);
+            query = data.query;
+            limit = data.limit || 5;
+          } catch (e) {
+            // Not valid JSON, try form-encoded
+          }
+        }
+        // 3. Form-encoded body (application/x-www-form-urlencoded)
+        if (!query && body) {
+          const formParams = new URLSearchParams(body);
+          if (formParams.get('query')) {
+            query = formParams.get('query');
+            limit = parseInt(formParams.get('limit')) || 5;
+          }
+        }
 
         if (!query) {
+          console.log('  ✗ No query found. Body:', body, 'URL params:', urlParts[1]);
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Query is required' }));
+          res.end(JSON.stringify({ error: 'Query is required. Send as JSON body {"query": "..."} or URL param ?query=...' }));
           return;
         }
 
