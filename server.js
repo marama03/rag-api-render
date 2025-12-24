@@ -113,7 +113,7 @@ async function searchWeaviate(embedding, limit = 5) {
           Document(
             nearVector: {
               vector: ${JSON.stringify(embedding)}
-              certainty: 0.75
+              certainty: 0.5
             }
             limit: ${limit}
           ) {
