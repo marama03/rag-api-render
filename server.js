@@ -684,10 +684,18 @@ const server = http.createServer(async (req, res) => {
       } else if (body && body.trim().startsWith('{')) {
         try {
           const data = JSON.parse(body);
+
+          // Assistable.ai wraps params in "args" object: {"args":{"query":"..."}, "metadata":{...}}
+          const params = data.args || data;
+
           // Accept: query, q, message, input, text, question, search
-          query = data.query || data.q || data.message || data.input || data.text || data.question || data.search;
-          limit = data.limit || 5;
-          clientId = clientId || data.client_id;
+          query = params.query || params.q || params.message || params.input || params.text || params.question || params.search;
+
+          // Filter out literal "null" string that Assistable.ai sends for empty values
+          if (query === 'null' || query === null) query = null;
+
+          limit = params.limit || data.limit || 5;
+          clientId = clientId || params.client_id || data.client_id;
         } catch (e) {
           console.log('  ⚠ Failed to parse JSON body:', e.message);
         }
