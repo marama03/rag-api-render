@@ -51,7 +51,7 @@ async function getDocumentCount() {
     });
 
     req.on('error', reject);
-    req.setTimeout(5000, () => {
+    req.setTimeout(30000, () => {
       req.destroy();
       reject(new Error('Weaviate count request timeout'));
     });
@@ -96,7 +96,7 @@ async function getEmbedding(text) {
     });
 
     req.on('error', reject);
-    req.setTimeout(10000, () => {
+    req.setTimeout(30000, () => {
       req.destroy();
       reject(new Error('OpenAI request timeout'));
     });
@@ -159,7 +159,7 @@ async function searchWeaviate(embedding, limit = 5) {
     });
 
     req.on('error', reject);
-    req.setTimeout(10000, () => {
+    req.setTimeout(30000, () => {
       req.destroy();
       reject(new Error('Weaviate request timeout'));
     });
