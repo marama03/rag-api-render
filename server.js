@@ -712,6 +712,28 @@ const server = http.createServer(async (req, res) => {
       }
 
       if (!query) {
+        // Check if this is an Assistable.ai Initialize test (sends query: "null")
+        const isInitializeTest = body && body.includes('"query":"null"');
+
+        if (isInitializeTest) {
+          // Return success for Initialize test
+          console.log(`  ✓ Assistable.ai Initialize test - returning success`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'success',
+            message: 'RAG API connected successfully! Ready to receive queries.',
+            api_version: '2.0.0',
+            endpoints: {
+              search: '/search (POST)',
+              count: '/count (GET)',
+              ingest: '/ingest (POST)',
+              documents: '/documents (GET)',
+              delete: '/delete/:id (POST)'
+            }
+          }));
+          return;
+        }
+
         console.log(`  ⚠ No query found. Body received: ${body ? body.substring(0, 200) : '(empty)'}`);
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
