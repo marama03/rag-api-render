@@ -677,30 +677,41 @@ const server = http.createServer(async (req, res) => {
       let clientId = urlParams.get('client_id');
 
       // Parse query from URL params or body
-      if (urlParams.get('query')) {
-        query = urlParams.get('query');
+      // Support multiple common field names for the query
+      if (urlParams.get('query') || urlParams.get('q') || urlParams.get('message') || urlParams.get('input')) {
+        query = urlParams.get('query') || urlParams.get('q') || urlParams.get('message') || urlParams.get('input');
         limit = parseInt(urlParams.get('limit')) || 5;
       } else if (body && body.trim().startsWith('{')) {
         try {
           const data = JSON.parse(body);
-          query = data.query;
+          // Accept: query, q, message, input, text, question, search
+          query = data.query || data.q || data.message || data.input || data.text || data.question || data.search;
           limit = data.limit || 5;
           clientId = clientId || data.client_id;
-        } catch (e) {}
+        } catch (e) {
+          console.log('  ⚠ Failed to parse JSON body:', e.message);
+        }
       }
 
       if (!query && body) {
         const formParams = new URLSearchParams(body);
-        if (formParams.get('query')) {
-          query = formParams.get('query');
+        const formQuery = formParams.get('query') || formParams.get('q') || formParams.get('message') || formParams.get('input');
+        if (formQuery) {
+          query = formQuery;
           limit = parseInt(formParams.get('limit')) || 5;
           clientId = clientId || formParams.get('client_id');
         }
       }
 
       if (!query) {
+        console.log(`  ⚠ No query found. Body received: ${body ? body.substring(0, 200) : '(empty)'}`);
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Query is required' }));
+        res.end(JSON.stringify({
+          error: 'Query is required',
+          hint: 'Send JSON with one of: query, q, message, input, text, question, search',
+          example: { query: 'your search query', limit: 5 },
+          received_body: body ? body.substring(0, 100) : null
+        }));
         return;
       }
 
